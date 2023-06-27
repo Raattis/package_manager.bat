@@ -1,4 +1,4 @@
-: " This is the beginning of a multiline comment in sh and a valid label in batch.
+: " In sh this syntax begins a multiline comment, whereas in batch it's a valid label that gets ignored.
 @goto batch_bootstrap_builder "
 if false; then */
 #error Remember to insert "#if 0" into the compiler input pipe or skip the first 6 lines when compiling this file.
@@ -11,25 +11,25 @@ if false; then */
 /*
 fi # sh_bootstrap_builder
 
-#Did you know that hashbang doesn't have to be on the first line of a file? Wild, right! "
-#!/bin/sh
+# Did you know that hashbang doesn't have to be on the first line of a file? Wild, right! "
+#!/usr/bin/env sh
 
 compiler_executable=gcc
 me=`basename "$0"`
 no_ext=`echo "$me" | cut -d'.' -f1`
-builder_executable="${no_ext}_builder.exe"
+executable="${no_ext}.exe"
 echo "#define PACKAGE_MANAGER
 #line 1 \"$me\"
-#if GOTO_BOOTSTRAP_BUILDER /*" | cat - $me | $compiler_executable -x c - -o $builder_executable
+#if GOTO_BOOTSTRAP_BUILDER /*" | cat - $me | $compiler_executable -x c - -o $executable
 
 compiler_exit_status=$?
 if test $compiler_exit_status -ne 0; then echo "Failed to compile $me. Exit code: $compiler_exit_status"; exit $compiler_exit_status; fi
 
-chmod +x $builder_executable
-./$builder_executable
+chmod +x $executable
+./$executable
 
 execution_exit_status=$?
-if test $execution_exit_status -ne 0; then echo "$builder_executable exited with status $execution_exit_status"; exit $execution_exit_status; fi
+if test $execution_exit_status -ne 0; then echo "$executable exited with status $execution_exit_status"; exit $execution_exit_status; fi
 
 exit 0
 
@@ -92,8 +92,22 @@ if not exist %compiler_executable% (
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h> // For path_exists
+#include <stdarg.h>
 
-enum { TRACE=0 };
+#if defined(_WIN32) || defined(_WIN64)
+#define PMBAT_WINDOWS 1
+#else
+#define PMBAT_WINDOWS 0
+#endif
+
+// rmdir, getcwd, chdir
+#if PMBAT_WINDOWS
+	// tcc just seems to get these functions from somewhere
+#else
+	#include <unistd.h>
+#endif
+
+enum { TRACE=1 };
 
 enum { TEMP_BUFFER_SIZE=1024*1024 };
 static char temp_buffer_first[TEMP_BUFFER_SIZE];
@@ -187,7 +201,7 @@ int download_file(const char* url, const char* output)
 {
 	trace_printf("Downloading '%s' to '%s'\n", url, output);
 
-#if defined(_WIN32) || defined(_WIN64)
+#if PMBAT_WINDOWS
 	char* command = tprintf("powershell -Command \"(New-Object System.Net.WebClient).DownloadFile('%s', '%s')\"", url, output);
 #else
 	char* command = tprintf("curl -o %s %s", output, url);
@@ -199,7 +213,7 @@ int unzip_file(const char* zip_file, const char* destination, const char* subfol
 {
 	trace_printf("Unzipping '%s' from '%s' to '%s'\n", zip_file, subfolder, destination);
 
-#if defined(_WIN32) || defined(_WIN64)
+#if PMBAT_WINDOWS
     char* command = tprintf(
 	"powershell -Command "
 	"\""
@@ -220,7 +234,7 @@ int move_directory_contents(const char* src, const char* dst)
 {
 	trace_printf("Moving contents from '%s' to '%s'\n", src, dst);
 
-#if defined(_WIN32) || defined(_WIN64)
+#if PMBAT_WINDOWS
 	char* command = tprintf("robocopy %s %s /MOVE", src, dst);
 #else
 	char* command = tprintf("mv %s* %s", src, dst);
@@ -232,7 +246,7 @@ int copy_file(const char* src, const char* dst)
 {
 	trace_printf("Copying file from '%s' to '%s'\n", src, dst);
 
-#if defined(_WIN32) || defined(_WIN64)
+#if PMBAT_WINDOWS
 	char* command = tprintf("copy /Y \"%s\" \"%s\"", src, dst);
 #else
 	char* command = tprintf("cp \"%s\" \"%s\"", src, dst);
@@ -361,8 +375,15 @@ int main(int argc, char** argv)
 		}
 	}
 
-	if (0 != (return_value = run_command(package_args.folder_name, package_args.main_file)))
-		return return_value;
+	{
+#if PMBAT_WINDOWS
+		const char* command = package_args.main_file;
+#else
+		const char* command = tprintf("./%s", package_args.main_file);
+#endif
+		if (0 != (return_value = run_command(package_args.folder_name, command)))
+			return return_value;
+	}
 
 	return 0;
 }
