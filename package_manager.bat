@@ -33,6 +33,7 @@ if test $execution_exit_status -ne 0; then echo "$executable exited with status 
 
 exit 0
 
+///////////////////////////////////////////////////////////////////////////////
 
 :batch_bootstrap_builder
 @echo off
