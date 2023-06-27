@@ -10,7 +10,7 @@ all:
 	chmod +x ./package_manager.bat
 	./package_manager.bat
 ```
-if you like but I find the presence of a Makefile to be more confusing than two short commands.
+if you like but I find the presence of a Makefile to be more daunting than two short commands.
 
 ## Info & troubleshooting
 On Windows, this automatically tries to download Tiny C Compiler. If the download fails due to permissions or something, it instructs you to download it manually.
