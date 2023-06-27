@@ -89,11 +89,11 @@ if not exist %compiler_executable% (
 
 #ifdef PACKAGE_MANAGER
 
+#include <stdarg.h> // va_list, va_start, va_end
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h> // For path_exists
-#include <stdarg.h>
+#include <sys/stat.h> // Used in dir_exists
 
 #if defined(_WIN32) || defined(_WIN64)
 #define PMBAT_WINDOWS 1
@@ -103,7 +103,7 @@ if not exist %compiler_executable% (
 
 // rmdir, getcwd, chdir
 #if PMBAT_WINDOWS
-	// tcc just seems to get these functions from somewhere
+	// tcc gets these functions from somewhere
 #else
 	#include <unistd.h>
 #endif
@@ -182,7 +182,7 @@ int file_exists(const char* filename)
 	return 1;
 }
 
-int path_exists(const char* path)
+int dir_exists(const char* path)
 {
 	trace_printf("Checking if '%s' path exists\n", path);
 
@@ -282,7 +282,7 @@ int download_and_unpack_package(Package_Args package_args)
 
 	if (!file_exists(main_file_path))
 	{
-		if (path_exists(folder_name))
+		if (dir_exists(folder_name))
 		{
 			fprintf(stderr, "ERROR: Path '%s' exists but doesn't contain '%s'\n", folder_name, main_file);
 			return 1;
@@ -307,7 +307,7 @@ int download_and_unpack_package(Package_Args package_args)
 				return 1;
 			}
 
-			if (!path_exists(folder_name))
+			if (!dir_exists(folder_name))
 			{
 				fprintf(stderr, "ERROR: Unzipping '%s' to '%s' didn't create a '%s' directory\n", temp_zip_file, unzip_dst_path, folder_name);
 				return 1;
