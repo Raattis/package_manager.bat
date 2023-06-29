@@ -135,7 +135,7 @@ static char* temp_printf_impl(const char* fmt, va_list args)
 
 	if (length < 0)
 	{
-		fprintf(stderr, "vsnprintf failed.");
+		fprintf(stderr, "vsnprintf failed.\n");
 		return "<FORMATTING ERROR>";
 	}
 
@@ -152,7 +152,7 @@ static char* temp_printf_impl(const char* fmt, va_list args)
 	if (length > 0)
 	{
 		if (result[length] != 0)
-			fprintf(stderr, "No null terminator?! After vsnprintf?!");
+			fprintf(stderr, "No null terminator?! After vsnprintf?!\n");
 	}
 
 	return result;
@@ -236,9 +236,9 @@ int move_directory_contents(const char* src, const char* dst)
 	trace_printf("Moving contents from '%s' to '%s'\n", src, dst);
 
 #if PMBAT_WINDOWS
-	char* command = tprintf("robocopy %s %s /MOVE", src, dst);
+	char* command = tprintf("robocopy \"%s\" \"%s\" /E /MOVE", src, dst);
 #else
-	char* command = tprintf("mv %s* %s", src, dst);
+	char* command = tprintf("mv -r \"%s\" \"%s\"", src, dst);
 #endif
 	return system(command);
 }
@@ -284,8 +284,8 @@ int download_and_unpack_package(Package_Args package_args)
 	{
 		if (dir_exists(folder_name))
 		{
-			fprintf(stderr, "ERROR: Path '%s' exists but doesn't contain '%s'\n", folder_name, main_file);
-			return 1;
+			fprintf(stderr, "WARNING: Path '%s' exists but doesn't contain '%s'\n", folder_name, main_file);
+			//return 1;
 		}
 
 		const char* temp_zip_file = tprintf("%s.zip", folder_name);
@@ -330,12 +330,12 @@ int run_command(const char* path, const char* command)
 
 	char original_path[4096];
 	if (getcwd(original_path, sizeof(original_path)) == 0) {
-		fprintf(stderr, "Couldn't get working directory before executing '%s'.", command);
+		fprintf(stderr, "Couldn't get working directory before executing '%s'.\n", command);
 		return 1;
 	}
 
 	if (chdir(path) != 0) {
-		fprintf(stderr, "ERROR: Couldn't move working directory from '%s' to '%s' before executing '%s'.", original_path, path, command);
+		fprintf(stderr, "ERROR: Couldn't move working directory from '%s' to '%s' before executing '%s'.\n", original_path, path, command);
 		return 1;
 	}
 
@@ -344,14 +344,49 @@ int run_command(const char* path, const char* command)
 	trace_printf("'%s' finished with return value: %d\n", command, result);
 
 	if (chdir(original_path) != 0) {
-		fprintf(stderr, "ERROR: Couldn't return working directory to '%s' from '%s' after executing '%s'.", original_path, path, command);
+		fprintf(stderr, "ERROR: Couldn't return working directory to '%s' from '%s' after executing '%s'.\n", original_path, path, command);
 		return 1;
 	}
 
 	return result;
 }
 
-int main(int argc, char** argv)
+int build_tcc(const char* dst)
+{
+	if (!PMBAT_WINDOWS)
+	{
+		fprintf(stderr, "TCC building is only supported on Windows for now.\n");
+		return 1;
+	}
+
+	Package_Args package_args = 
+	{
+		.main_file = "tcc.c",
+		.folder_name = "tcc_mob",
+		.zip_internal_path_to_root = "tinycc-mob",
+		.download_path = "https://github.com/TinyCC/tinycc/archive/refs/heads/mob.zip",
+	};
+
+	int return_value;
+	if (0 != (return_value = download_and_unpack_package(package_args)))
+		return return_value;
+
+	{
+#if PMBAT_WINDOWS
+		const char* path = tprintf("./%s/win32", package_args.folder_name);
+		const char* command = tprintf("build-tcc.bat -c ..\\..\\tcc\\tcc.exe -i ..\\..\\%s", dst);
+#else
+		const char* path = package_args.folder_name;
+		const char* command = tprintf("make");
+#endif
+		if (0 != (return_value = run_command(path, command)))
+			return return_value;
+	}
+
+	return 0;
+}
+
+int build_quine_bat()
 {
 	Package_Args package_args = 
 	{
@@ -365,6 +400,8 @@ int main(int argc, char** argv)
 	if (0 != (return_value = download_and_unpack_package(package_args)))
 		return return_value;
 
+	if (!file_exists(tprintf("%s/tcc.exe", package_args.folder_name))
+		&& !dir_exists(tprintf("%s/tcc", package_args.folder_name)))
 	{
 		// Copy the compiler zip file over to avoid double downloading
 
@@ -385,6 +422,21 @@ int main(int argc, char** argv)
 		if (0 != (return_value = run_command(package_args.folder_name, command)))
 			return return_value;
 	}
+
+	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	int return_value;
+	
+#if PMBAT_WINDOWS
+	if (0 != (return_value = build_tcc("quine_bat\\tcc")))
+		return return_value;
+#endif
+
+	if (0 != (return_value = build_quine_bat()))
+		return return_value;
 
 	return 0;
 }
