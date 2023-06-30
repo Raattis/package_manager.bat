@@ -108,7 +108,7 @@ if not exist %compiler_executable% (
 	#include <unistd.h>
 #endif
 
-enum { TRACE=1 };
+enum { TRACE=0 };
 
 enum { TEMP_BUFFER_SIZE=1024*1024 };
 static char temp_buffer_first[TEMP_BUFFER_SIZE];
@@ -123,10 +123,11 @@ static char* temp_printf_impl(const char* fmt, va_list args)
 
 	if (space_left <= 0)
 	{
-		trace_printf("Allocating %d more bytes for tprintf.", TEMP_BUFFER_SIZE);
+		trace_printf("Allocating %d more bytes for tprintf.\n", TEMP_BUFFER_SIZE);
 
 		temp_buffer_ptr = malloc(TEMP_BUFFER_SIZE);
 		temp_buffer_head = 0;
+		space_left = TEMP_BUFFER_SIZE;
 	}
 
 	char* result = temp_buffer_ptr + temp_buffer_head;
@@ -135,20 +136,18 @@ static char* temp_printf_impl(const char* fmt, va_list args)
 
 	if (length < 0)
 	{
+		if (space_left < TEMP_BUFFER_SIZE) // Possibly ran out of space
+		{
+			temp_buffer_head = TEMP_BUFFER_SIZE;
+			return temp_printf_impl(fmt, args); // Try again with a new buffer
+		}
+		
 		fprintf(stderr, "vsnprintf failed.\n");
 		return "<FORMATTING ERROR>";
 	}
 
 	temp_buffer_head += length + 1;
 
-	if (length + 1 >= space_left) // Possibly ran out of space
-	{
-		if (length + 1 < TEMP_BUFFER_SIZE) // The buffer was already partially spent
-		{
-			return temp_printf_impl(fmt, args); // Try again with a new buffer
-		}
-	}
-	
 	if (length > 0)
 	{
 		if (result[length] != 0)
@@ -266,6 +265,7 @@ typedef struct
 {
 	const char* main_file;
 	const char* folder_name;
+	const char* zip_file_name;
 	const char* zip_internal_path_to_root;
 	const char* download_path;
 	int downloaded_zip_has_no_root_folder;
@@ -275,10 +275,11 @@ int download_and_unpack_package(Package_Args package_args)
 {
 	const char* main_file = package_args.main_file;
 	const char* folder_name = package_args.folder_name;
+	const char* zip_file_name = package_args.zip_file_name;
 	const char* download_path = package_args.download_path;
 	const char* main_file_path = tprintf("./%s/%s", folder_name, main_file);
 
-	trace_printf("download_and_unpack_package('%s', '%s', '%s')\n", package_args.main_file, package_args.folder_name, package_args.download_path);
+	trace_printf("download_and_unpack_package('%s', '%s', '%s', '%s')\n", main_file, zip_file_name, folder_name, download_path);
 
 	if (!file_exists(main_file_path))
 	{
@@ -288,35 +289,35 @@ int download_and_unpack_package(Package_Args package_args)
 			//return 1;
 		}
 
-		const char* temp_zip_file = tprintf("%s.zip", folder_name);
-		if (!file_exists(temp_zip_file))
+		char* zip_file_path = tprintf("./%s", zip_file_name);
+		if (!file_exists(zip_file_path))
 		{
-			printf("Couldn't find './%s' or './%s' would you like me to download the program source code from '%s'? [Y/n] ", main_file_path, temp_zip_file, download_path); 
+			printf("Couldn't find './%s' or './%s' would you like me to download the program source code from '%s'? [Y/n] ", main_file_path, zip_file_path, download_path); 
 			if (!get_Yn_input())
 				return 1;
 
-			download_file(download_path, temp_zip_file);
+			download_file(download_path, zip_file_path);
 		}
 
 		{
 			char* unzip_dst_path =  tprintf("./%s", folder_name);
 			char* unzip_src_path =  package_args.zip_internal_path_to_root ? tprintf("./%s", package_args.zip_internal_path_to_root) : ".";
-			if (0 != unzip_file(temp_zip_file, unzip_dst_path, unzip_src_path))
+			if (0 != unzip_file(zip_file_path, unzip_dst_path, unzip_src_path))
 			{
-				fprintf(stderr, "ERROR: Unzipping '%s' failed '%s' -> '%s'\n", temp_zip_file, unzip_src_path, unzip_dst_path);
+				fprintf(stderr, "ERROR: Unzipping '%s' failed '%s' -> '%s'\n", zip_file_path, unzip_src_path, unzip_dst_path);
 				return 1;
 			}
 
 			if (!dir_exists(folder_name))
 			{
-				fprintf(stderr, "ERROR: Unzipping '%s' to '%s' didn't create a '%s' directory\n", temp_zip_file, unzip_dst_path, folder_name);
+				fprintf(stderr, "ERROR: Unzipping '%s' to '%s' didn't create a '%s' directory\n", zip_file_path, unzip_dst_path, folder_name);
 				return 1;
 			}
 		}
 
 		if (!file_exists(main_file_path))
 		{
-			fprintf(stderr, "ERROR: '%s' didn't contain '%s'\n", temp_zip_file, package_args.zip_internal_path_to_root ? main_file : main_file_path);
+			fprintf(stderr, "ERROR: '%s' didn't contain '%s'\n", zip_file_path, package_args.zip_internal_path_to_root ? main_file : main_file_path);
 			return 1;
 		}
 	}
@@ -342,6 +343,10 @@ int run_command(const char* path, const char* command)
 	int result = system(command);
 
 	trace_printf("'%s' finished with return value: %d\n", command, result);
+	if (result != 0)
+	{
+		fprintf(stderr, "'%s' returned %d.\n", command, result);
+	}
 
 	if (chdir(original_path) != 0) {
 		fprintf(stderr, "ERROR: Couldn't return working directory to '%s' from '%s' after executing '%s'.\n", original_path, path, command);
@@ -359,22 +364,37 @@ int build_tcc(const char* dst)
 		return 1;
 	}
 
-	Package_Args package_args = 
+	/*
+	Package_Args src_args = 
 	{
 		.main_file = "tcc.c",
-		.folder_name = "tcc_mob",
+		.folder_name = "tcc_src",
+		.zip_file_name = "release_0_9_27.zip",
+		.zip_internal_path_to_root = "tinycc-release_0_9_27",
+		.download_path = "https://github.com/TinyCC/tinycc/archive/refs/tags/release_0_9_27.zip",
+	};
+	*/
+
+	/*
+	*/
+	Package_Args src_args = 
+	{
+		.main_file = "tcc.c",
+		.folder_name = "tcc_src",
+		.zip_file_name = "mob.zip",
 		.zip_internal_path_to_root = "tinycc-mob",
 		.download_path = "https://github.com/TinyCC/tinycc/archive/refs/heads/mob.zip",
 	};
 
 	int return_value;
-	if (0 != (return_value = download_and_unpack_package(package_args)))
+
+	if (0 != (return_value = download_and_unpack_package(src_args)))
 		return return_value;
 
 	{
 #if PMBAT_WINDOWS
-		const char* path = tprintf("./%s/win32", package_args.folder_name);
-		const char* command = tprintf("build-tcc.bat -c ..\\..\\tcc\\tcc.exe -i ..\\..\\%s", dst);
+		const char* path = tprintf(".\\%s\\win32", src_args.folder_name);
+		const char* command = tprintf("build-tcc.bat -c \"..\\..\\tcc\\tcc.exe\" -i \"..\\..\\%s\" > nul 2>&1", dst);
 #else
 		const char* path = package_args.folder_name;
 		const char* command = tprintf("make");
@@ -392,18 +412,20 @@ int build_quine_bat()
 	{
 		.main_file = "quine.bat",
 		.folder_name = "quine_bat",
+		.zip_file_name = "quine_bat.zip",
 		.zip_internal_path_to_root = "quine.bat-main",
 		.download_path = "https://github.com/Raattis/quine.bat/archive/refs/heads/main.zip",
 	};
 
 	int return_value;
+
 	if (0 != (return_value = download_and_unpack_package(package_args)))
 		return return_value;
 
 	if (!file_exists(tprintf("%s/tcc.exe", package_args.folder_name))
 		&& !dir_exists(tprintf("%s/tcc", package_args.folder_name)))
 	{
-		// Copy the compiler zip file over to avoid double downloading
+		// Copy the compiler zip file over to avoid unnecessary downloading
 
 		const char* compiler_zip_name = "tcc-0.9.27-win64-bin.zip";
 		if (file_exists(compiler_zip_name))
@@ -431,8 +453,10 @@ int main(int argc, char** argv)
 	int return_value;
 	
 #if PMBAT_WINDOWS
-	if (0 != (return_value = build_tcc("quine_bat\\tcc")))
-		return return_value;
+	if (0 != (return_value = build_tcc("quine_bat")))
+	{
+		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for quine.bat\n");
+	}
 #endif
 
 	if (0 != (return_value = build_quine_bat()))
