@@ -80,7 +80,7 @@ if not exist %compiler_executable% (
 	echo #line 0 "%~n0%~x0"
 	echo #if GOTO_BOOTSTRAP_BUILDER
 	type %~n0%~x0
-) | %compiler_executable% -xc - -run -bench
+) | %compiler_executable% -xc - -run -bench -DPE_PRINT_SECTIONS
 @exit ERRORLEVEL
 */
 #endif // BOOTSTRAP_BUILDER
@@ -451,7 +451,7 @@ int build_quine_bat()
 int main(int argc, char** argv)
 {
 	int return_value;
-	
+
 #if PMBAT_WINDOWS
 	if (0 != (return_value = build_tcc("quine_bat")))
 	{
@@ -461,6 +461,18 @@ int main(int argc, char** argv)
 
 	if (0 != (return_value = build_quine_bat()))
 		return return_value;
+
+	if (0 != run_command("quine_bat", ".\\tcc.exe .\\libtcc_test.c -Ilibtcc -Llibtcc -Llib -llibtcc"))
+	{
+		fprintf(stderr, "Test compile failed.\n");
+		return 1;
+	}
+
+	if (0 != run_command("quine_bat", ".\\libtcc_test.exe -Lgdi32 -Iinclude -Luser32 -Lkernel32"))
+	{
+		fprintf(stderr, "Test failed.\n");
+		return 1;
+	}
 
 	return 0;
 }
