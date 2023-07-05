@@ -108,7 +108,7 @@ if not exist %compiler_executable% (
 	#include <unistd.h>
 #endif
 
-enum { TRACE=0 };
+enum { TRACE=1 };
 
 enum { TEMP_BUFFER_SIZE=1024*1024 };
 static char temp_buffer_first[TEMP_BUFFER_SIZE];
@@ -394,7 +394,33 @@ int build_tcc(const char* dst)
 	{
 #if PMBAT_WINDOWS
 		const char* path = tprintf(".\\%s\\win32", src_args.folder_name);
-		const char* command = tprintf("build-tcc.bat -c \"..\\..\\tcc\\tcc.exe\" -i \"..\\..\\%s\" > nul 2>&1", dst);
+		const char* filename = "build-tcc.bat";
+		{
+			const char* file_path = tprintf("%s\\%s", path, filename);
+			FILE* build_tcc_bat = fopen(file_path, "rb+");
+			if (!build_tcc_bat) {
+				printf("Failed to open file. Err: %d\n", errno);
+				return 1;
+			}
+
+			char line[16*1024];
+			const char needle[]      = "git.exe --version 2>nul";
+			const char replacement[] = "git.exe rev-parse 2>nul";
+			while (fgets(line, sizeof(line), build_tcc_bat))
+			{
+				if (0 == strncmp(line, needle, sizeof(needle) - 1))
+				{
+					fseek(build_tcc_bat, -strlen(line), SEEK_CUR);
+					fwrite(replacement, sizeof(char), sizeof(replacement) - 1, build_tcc_bat);
+					trace_printf("Replaced '%s' with '%s' in '%s'.\n", needle, replacement, file_path);
+					break;
+				}
+			}
+			
+			fclose(build_tcc_bat);
+		}
+
+		const char* command = tprintf("build-tcc.bat -c \"..\\..\\tcc\\tcc.exe -DMEM_DEBUG=2\" -i \"..\\..\\%s\" -t 64 > nul", dst);
 #else
 		const char* path = package_args.folder_name;
 		const char* command = tprintf("make");
