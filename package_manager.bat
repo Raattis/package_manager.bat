@@ -41,7 +41,7 @@ set compiler_executable=.\tcc\tcc.exe
 set compiler_zip_name=tcc-0.9.27-win64-bin.zip
 set download_tcc=n
 if not exist %compiler_executable% if not exist %compiler_zip_name% set /P download_tcc="Download Tiny C Compiler? Please, try to avoid unnecessary redownloading. [y/n] "
-
+	
 if not exist %compiler_executable% (
 	if not exist %compiler_zip_name% (
 		if %download_tcc% == y (
@@ -455,7 +455,7 @@ int build_tcc(const char* dst)
 		return return_value;
 
 	const char* compiler_source = tprintf("./%s", src_args.folder_name);
-	const char* compiler_executable = "./quine_bat/tcc.exe";
+	const char* compiler_executable = "./rewind_bat/tcc.exe";
 	if (!RECOMPILE_TCC_EVERY_TIME && get_newest_file_timestamp(compiler_source) < get_file_timestamp(compiler_executable))
 	{
 		trace_printf("Skipping tcc recompile. Contents of '%s' are older than '%s'.\n", compiler_source, compiler_executable);
@@ -522,15 +522,15 @@ int build_tcc(const char* dst)
 	return 0;
 }
 
-int build_quine_bat()
+int build_rewind_bat()
 {
 	Package_Args package_args =
 	{
-		.main_file = "quine.bat",
-		.folder_name = "quine_bat",
-		.zip_file_name = "quine_bat.zip",
-		.zip_internal_path_to_root = "quine.bat-main",
-		.download_path = "https://github.com/Raattis/quine.bat/archive/refs/heads/main.zip",
+		.main_file = "rewind.bat",
+		.folder_name = "rewind_bat",
+		.zip_file_name = "rewind_bat.zip",
+		.zip_internal_path_to_root = "rewind.bat-main",
+		.download_path = "https://github.com/Raattis/rewind.bat/archive/refs/heads/main.zip",
 	};
 
 	int return_value;
@@ -610,13 +610,13 @@ int main(int argc, char** argv)
 {
 	int return_value;
 
-	if (0 != (return_value = build_tcc("quine_bat")))
-		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for quine.bat\n");
+	if (0 != (return_value = build_tcc("rewind_bat")))
+		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for rewind.bat\n");
 
 	if (0 != (return_value = build_and_run_libtcc_test("tcc")))
 		return return_value;
 
-	if (0 != (return_value = build_quine_bat()))
+	if (0 != (return_value = build_rewind_bat()))
 		return return_value;
 
 	return 0;
