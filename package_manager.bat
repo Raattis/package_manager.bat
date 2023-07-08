@@ -555,7 +555,7 @@ int build_quine_bat()
 #if PMBAT_WINDOWS
 		const char* command = package_args.main_file;
 #else
-		const char* command = tprintf("./%s", package_args.main_file);
+		const char* command = tprintf("sh ./%s", package_args.main_file);
 #endif
 		if (0 != (return_value = run_command(package_args.folder_name, command)))
 			return return_value;
@@ -564,31 +564,60 @@ int build_quine_bat()
 	return 0;
 }
 
-int main(int argc, char** argv)
+int build_and_run_libtcc_test(const char* path)
 {
-	int return_value;
+	trace_printf("Running 'libtcc_test'.\n");
 
 #if PMBAT_WINDOWS
-	if (0 != (return_value = build_tcc("quine_bat")))
-	{
-		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for quine.bat\n");
-	}
+	const char* build = ".\\tcc.exe .\\examples\\libtcc_test.c -o libtcc_test.exe -Ilibtcc -Llibtcc -Llib -llibtcc";
+	const char* run = ".\\libtcc_test.exe -Lgdi32 -Iinclude -Luser32 -Lkernel32";
+	const char* remove = "del libtcc_test.exe";
+#else
+	const char* build = "./tcc.exe ./examples/libtcc_test.c -o libtcc_test.exe -Ilibtcc -Llibtcc -Llib -llibtcc";
+	const char* run = "./libtcc_test.exe -Lgdi32 -Iinclude -Luser32 -Lkernel32";
+	const char* remove  = "rm libtcc_test.exe";
 #endif
 
-	if (0 != (return_value = build_quine_bat()))
-		return return_value;
-
-	if (0 != run_command("quine_bat", ".\\tcc.exe .\\libtcc_test.c -Ilibtcc -Llibtcc -Llib -llibtcc"))
+	if (0 != run_command(path, build))
 	{
 		fprintf(stderr, "Test compile failed.\n");
 		return 1;
 	}
 
-	if (0 != run_command("quine_bat", ".\\libtcc_test.exe -Lgdi32 -Iinclude -Luser32 -Lkernel32"))
+	if (!PMBAT_WINDOWS)
+	{
+		if (0 != run_command(path, "chmod +x ./libtcc_test.exe"))
+			return 1;
+	}
+
+	if (0 != run_command(path, run))
 	{
 		fprintf(stderr, "Test failed.\n");
 		return 1;
 	}
+
+	if (0 != run_command(path, remove))
+	{
+		return 1;
+	}
+
+	trace_printf("'libtcc_test' test succeeded!\n");
+
+	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	int return_value;
+
+	if (0 != (return_value = build_tcc("quine_bat")))
+		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for quine.bat\n");
+
+	if (0 != (return_value = build_and_run_libtcc_test("tcc")))
+		return return_value;
+
+	if (0 != (return_value = build_quine_bat()))
+		return return_value;
 
 	return 0;
 }
