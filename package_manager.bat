@@ -237,7 +237,9 @@ int unzip_file(const char* zip_file, const char* destination, const char* subfol
 	, destination, subfolder, destination
 	, destination);
 #else
-	char* command = tprintf("unzip %s '%s/*' -d %s", zip_file, subfolder, destination);
+	if (subfolder && subfolder[0] == '.' && subfolder[1] == '/')
+		subfolder += 2;
+	char* command = tprintf("unzip -j %s '%s/*' -d %s", zip_file, subfolder, destination);
 #endif
 	return system(command);
 }
