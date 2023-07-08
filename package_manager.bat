@@ -73,7 +73,7 @@ if not exist %compiler_executable% (
 	)
 
 	echo Tiny C Compiler Acquired!
-) 
+)
 
 (
 	echo #define PACKAGE_MANAGER
@@ -94,6 +94,7 @@ if not exist %compiler_executable% (
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h> // Used in dir_exists
+#include <time.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 #define PMBAT_WINDOWS 1
@@ -108,7 +109,7 @@ if not exist %compiler_executable% (
 	#include <unistd.h>
 #endif
 
-enum { TRACE=1 };
+enum { TRACE=1, RECOMPILE_TCC_EVERY_TIME=0 };
 
 enum { TEMP_BUFFER_SIZE=1024*1024 };
 static char temp_buffer_first[TEMP_BUFFER_SIZE];
@@ -141,7 +142,7 @@ static char* temp_printf_impl(const char* fmt, va_list args)
 			temp_buffer_head = TEMP_BUFFER_SIZE;
 			return temp_printf_impl(fmt, args); // Try again with a new buffer
 		}
-		
+
 		fprintf(stderr, "vsnprintf failed.\n");
 		return "<FORMATTING ERROR>";
 	}
@@ -171,13 +172,17 @@ char* tprintf(const char* fmt, ...)
 
 int file_exists(const char* filename)
 {
-	trace_printf("Checking if '%s' exists\n", filename);
+	trace_printf("Checking if '%s' exists ... ", filename);
 
 	FILE* file = fopen(filename, "r");
 	if (!file)
+	{
+		trace_printf("It does not.\n");
 		return 0;
+	}
 
 	fclose(file);
+	trace_printf("It does!\n");
 	return 1;
 }
 
@@ -185,8 +190,8 @@ int dir_exists(const char* path)
 {
 	trace_printf("Checking if '%s' path exists\n", path);
 
-	struct stat directoryStat;
-	return stat(path, &directoryStat) == 0 && S_ISDIR(directoryStat.st_mode);
+	struct stat directory_stat;
+	return stat(path, &directory_stat) == 0 && S_ISDIR(directory_stat.st_mode);
 }
 
 int get_Yn_input()
@@ -214,7 +219,7 @@ int unzip_file(const char* zip_file, const char* destination, const char* subfol
 	trace_printf("Unzipping '%s' from '%s' to '%s'\n", zip_file, subfolder, destination);
 
 #if PMBAT_WINDOWS
-    char* command = tprintf(
+	char* command = tprintf(
 	"powershell -Command "
 	"\""
 	"Expand-Archive -Path '%s' -DestinationPath '%s/temp_unzip_hack' ; "
@@ -292,7 +297,7 @@ int download_and_unpack_package(Package_Args package_args)
 		char* zip_file_path = tprintf("./%s", zip_file_name);
 		if (!file_exists(zip_file_path))
 		{
-			printf("Couldn't find './%s' or './%s' would you like me to download the program source code from '%s'? [Y/n] ", main_file_path, zip_file_path, download_path); 
+			printf("Couldn't find './%s' or './%s' would you like me to download the program source code from '%s'? [Y/n] ", main_file_path, zip_file_path, download_path);
 			if (!get_Yn_input())
 				return 1;
 
@@ -356,6 +361,55 @@ int run_command(const char* path, const char* command)
 	return result;
 }
 
+time_t get_file_timestamp(const char *file_path)
+{
+	trace_printf("Fetching timestamp for '%s' ... ", file_path);
+
+	struct stat file_stat;
+	if (stat(file_path, &file_stat) == -1)
+	{
+		trace_printf("Unable to get file information for '%s'. Assuming it doesn't exist. Returning an old timestamp.\n", file_path);
+		return (time_t)0;
+	}
+
+	time_t file_timestamp = file_stat.st_mtime;
+
+	trace_printf("%ld\n", file_timestamp);
+	return file_timestamp;
+}
+
+time_t get_newest_file_timestamp(const char *path)
+{
+	trace_printf("Newest file under '%s' ... ", path);
+
+#ifdef _WIN32
+	const char *command = tprintf("dir /b /s /o:-d \"%s\"", path);
+#else
+	const char *command = tprintf("find \"%s\" -type f -exec ls -lt {} +", path);
+#endif
+
+	FILE *fp = popen(command, "r");
+	if (fp == NULL) {
+		fprintf(stderr, "Failed to execute command: '%s'\n", command);
+		exit(EXIT_FAILURE);
+	}
+
+	char result[1024];
+	if (fgets(result, sizeof(result), fp) == NULL) {
+		fprintf(stderr, "Failed to read command output:'%s'\n", command);
+		exit(EXIT_FAILURE);
+	}
+
+	pclose(fp);
+
+	if (result[strlen(result) - 1] == '\n')
+	{
+		result[strlen(result) - 1] = '\0';
+	}
+
+	return get_file_timestamp(result);
+}
+
 int build_tcc(const char* dst)
 {
 	if (!PMBAT_WINDOWS)
@@ -365,7 +419,7 @@ int build_tcc(const char* dst)
 	}
 
 	/*
-	Package_Args src_args = 
+	Package_Args src_args =
 	{
 		.main_file = "tcc.c",
 		.folder_name = "tcc_src",
@@ -377,7 +431,7 @@ int build_tcc(const char* dst)
 
 	/*
 	*/
-	Package_Args src_args = 
+	Package_Args src_args =
 	{
 		.main_file = "tcc.c",
 		.folder_name = "tcc_src",
@@ -391,11 +445,24 @@ int build_tcc(const char* dst)
 	if (0 != (return_value = download_and_unpack_package(src_args)))
 		return return_value;
 
+	const char* compiler_source = tprintf("./%s", src_args.folder_name);
+	const char* compiler_executable = "./quine_bat/tcc.exe";
+	if (!RECOMPILE_TCC_EVERY_TIME && get_newest_file_timestamp(compiler_source) < get_file_timestamp(compiler_executable))
 	{
+		trace_printf("Skipping tcc recompile. Contents of '%s' are older than '%s'.\n", compiler_source, compiler_executable);
+	}
+	else
+	{
+		if (!RECOMPILE_TCC_EVERY_TIME)
+			trace_printf("Contents of '%s' are newer than '%s'.", compiler_source, compiler_executable);
+
+		printf("Recompiling tcc...\n");
+
 #if PMBAT_WINDOWS
 		const char* path = tprintf(".\\%s\\win32", src_args.folder_name);
 		const char* filename = "build-tcc.bat";
 		{
+			// Patch a bug in build-tcc.bat where it expects the folder to be git repo.
 			const char* file_path = tprintf("%s\\%s", path, filename);
 			FILE* build_tcc_bat = fopen(file_path, "rb+");
 			if (!build_tcc_bat) {
@@ -403,9 +470,10 @@ int build_tcc(const char* dst)
 				return 1;
 			}
 
-			char line[16*1024];
+			// It was a happy accident that these lines are the same length. I don't think this patching hack would work otherwise.
 			const char needle[]      = "git.exe --version 2>nul";
 			const char replacement[] = "git.exe rev-parse 2>nul";
+			char line[16*1024];
 			while (fgets(line, sizeof(line), build_tcc_bat))
 			{
 				if (0 == strncmp(line, needle, sizeof(needle) - 1))
@@ -416,7 +484,7 @@ int build_tcc(const char* dst)
 					break;
 				}
 			}
-			
+
 			fclose(build_tcc_bat);
 		}
 
@@ -427,6 +495,19 @@ int build_tcc(const char* dst)
 #endif
 		if (0 != (return_value = run_command(path, command)))
 			return return_value;
+
+		// Update tcc.exe timestamp to enable avoiding unnecessary recompilation
+#if PMBAT_WINDOWS
+		const char* dst_path = tprintf(".\\%s", dst);
+		trace_printf("Copying '%s' on top of itself to force the timestamp to refresh.\n", dst_path);
+		if (0 != (return_value = run_command(dst_path, "copy /b \"tcc.exe\"+\"NUL\" \"tcc.exe\" > NUL")))
+			return return_value;
+#else
+		if (0 != (return_value = run_command(tprintf("./%s", dst), "touch \"tcc.exe\"")))
+			return return_value;
+#endif
+
+		trace_printf("Successfully compiled TCC.\n");
 	}
 
 	return 0;
@@ -434,7 +515,7 @@ int build_tcc(const char* dst)
 
 int build_quine_bat()
 {
-	Package_Args package_args = 
+	Package_Args package_args =
 	{
 		.main_file = "quine.bat",
 		.folder_name = "quine_bat",
@@ -448,8 +529,8 @@ int build_quine_bat()
 	if (0 != (return_value = download_and_unpack_package(package_args)))
 		return return_value;
 
-	if (!file_exists(tprintf("%s/tcc.exe", package_args.folder_name))
-		&& !dir_exists(tprintf("%s/tcc", package_args.folder_name)))
+	if (!file_exists(tprintf("./%s/tcc.exe", package_args.folder_name))
+		&& !dir_exists(tprintf("./%s/tcc", package_args.folder_name)))
 	{
 		// Copy the compiler zip file over to avoid unnecessary downloading
 
