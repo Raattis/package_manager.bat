@@ -19,7 +19,7 @@ me=`basename "$0"`
 no_ext=`echo "$me" | cut -d'.' -f1`
 executable="${no_ext}.exe"
 echo "#define PACKAGE_MANAGER
-#line 1 \"$me\"
+#line 0 \"$me\"
 #if GOTO_BOOTSTRAP_BUILDER /*" | cat - $me | $compiler_executable -x c - -o $executable
 
 compiler_exit_status=$?
@@ -188,10 +188,17 @@ int file_exists(const char* filename)
 
 int dir_exists(const char* path)
 {
-	trace_printf("Checking if '%s' path exists\n", path);
+	trace_printf("Checking if '%s' path exists ... ", path);
 
 	struct stat directory_stat;
-	return stat(path, &directory_stat) == 0 && S_ISDIR(directory_stat.st_mode);
+	if(stat(path, &directory_stat) != 0 || !S_ISDIR(directory_stat.st_mode))
+	{
+		trace_printf("It does not.\n");
+		return 0;
+	}
+
+	trace_printf("It does!\n");
+	return 1;
 }
 
 int get_Yn_input()
@@ -462,7 +469,7 @@ int build_tcc(const char* dst)
 		const char* path = tprintf(".\\%s\\win32", src_args.folder_name);
 		const char* filename = "build-tcc.bat";
 		{
-			// Patch a bug in build-tcc.bat where it expects the folder to be git repo.
+			// Patch a bug in build-tcc.bat where it expects the folder to be a git repo.
 			const char* file_path = tprintf("%s\\%s", path, filename);
 			FILE* build_tcc_bat = fopen(file_path, "rb+");
 			if (!build_tcc_bat) {
@@ -470,7 +477,7 @@ int build_tcc(const char* dst)
 				return 1;
 			}
 
-			// It was a happy accident that these lines are the same length. I don't think this patching hack would work otherwise.
+			// It's a happy accident that these lines are the same length. I don't think this patching hack would work otherwise.
 			const char needle[]      = "git.exe --version 2>nul";
 			const char replacement[] = "git.exe rev-parse 2>nul";
 			char line[16*1024];
@@ -490,7 +497,7 @@ int build_tcc(const char* dst)
 
 		const char* command = tprintf("build-tcc.bat -c \"..\\..\\tcc\\tcc.exe -DMEM_DEBUG=2\" -i \"..\\..\\%s\" -t 64 > nul", dst);
 #else
-		const char* path = package_args.folder_name;
+		const char* path = src_args.folder_name;
 		const char* command = tprintf("make");
 #endif
 		if (0 != (return_value = run_command(path, command)))
