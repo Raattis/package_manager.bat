@@ -41,7 +41,7 @@ set compiler_executable=.\tcc\tcc.exe
 set compiler_zip_name=tcc-0.9.27-win64-bin.zip
 set download_tcc=n
 if not exist %compiler_executable% if not exist %compiler_zip_name% set /P download_tcc="Download Tiny C Compiler? Please, try to avoid unnecessary redownloading. [y/n] "
-	
+
 if not exist %compiler_executable% (
 	if not exist %compiler_zip_name% (
 		if %download_tcc% == y (
@@ -455,7 +455,7 @@ int build_tcc(const char* dst)
 		return return_value;
 
 	const char* compiler_source = tprintf("./%s", src_args.folder_name);
-	const char* compiler_executable = "./rewind_bat/tcc.exe";
+	const char* compiler_executable = tprintf("./%s/tcc.exe", dst);
 	if (!RECOMPILE_TCC_EVERY_TIME && get_newest_file_timestamp(compiler_source) < get_file_timestamp(compiler_executable))
 	{
 		trace_printf("Skipping tcc recompile. Contents of '%s' are older than '%s'.\n", compiler_source, compiler_executable);
@@ -463,7 +463,7 @@ int build_tcc(const char* dst)
 	else
 	{
 		if (!RECOMPILE_TCC_EVERY_TIME)
-			trace_printf("Contents of '%s' are newer than '%s'.", compiler_source, compiler_executable);
+			trace_printf("Contents of '%s' are newer than '%s'. ", compiler_source, compiler_executable);
 
 		printf("Recompiling tcc...\n");
 
@@ -538,7 +538,7 @@ int build_rewind_bat()
 	if (0 != (return_value = download_and_unpack_package(package_args)))
 		return return_value;
 
-	if (!file_exists(tprintf("./%s/tcc.exe", package_args.folder_name))
+	if (!file_exists(tprintf("./%s/tcc/tcc.exe", package_args.folder_name))
 		&& !dir_exists(tprintf("./%s/tcc", package_args.folder_name)))
 	{
 		// Copy the compiler zip file over to avoid unnecessary downloading
@@ -610,7 +610,7 @@ int main(int argc, char** argv)
 {
 	int return_value;
 
-	if (0 != (return_value = build_tcc("rewind_bat")))
+	if (0 != (return_value = build_tcc("rewind_bat/tcc")))
 		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for rewind.bat\n");
 
 	if (0 != (return_value = build_and_run_libtcc_test("tcc")))
