@@ -479,9 +479,9 @@ int build_tcc(const char* dst)
 				return 1;
 			}
 
-			// It's a happy accident that these lines are the same length. I don't think this patching hack would work otherwise.
+			// I'm assuming these strings need to be the same length for this replacement to work
 			const char needle[]      = "git.exe --version 2>nul";
-			const char replacement[] = "git.exe rev-parse 2>nul";
+			const char replacement[] = "goto git_done          ";
 			char line[16*1024];
 			while (fgets(line, sizeof(line), build_tcc_bat))
 			{
@@ -610,6 +610,7 @@ int main(int argc, char** argv)
 {
 	int return_value;
 
+	// Build tcc from source
 	if (0 != (return_value = build_tcc("rewind_bat/tcc")))
 		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for rewind.bat\n");
 
