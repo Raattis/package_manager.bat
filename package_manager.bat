@@ -216,7 +216,7 @@ int download_file(const char* url, const char* output)
 #if PMBAT_WINDOWS
 	char* command = tprintf("powershell -Command \"(New-Object System.Net.WebClient).DownloadFile('%s', '%s')\"", url, output);
 #else
-	char* command = tprintf("curl -o %s %s", output, url);
+	char* command = tprintf("wget -O %s %s", output, url);
 #endif
 	return system(command);
 }
@@ -239,7 +239,7 @@ int unzip_file(const char* zip_file, const char* destination, const char* subfol
 #else
 	if (subfolder && subfolder[0] == '.' && subfolder[1] == '/')
 		subfolder += 2;
-	char* command = tprintf("unzip -j %s '%s/*' -d %s", zip_file, subfolder, destination);
+	char* command = tprintf("mkdir \"%s\" ; unzip -q \"%s\" \"%s/*\" -d \".\" && mv -f %s/* \"./%s/\" && rm -rf %s", destination, zip_file, subfolder, subfolder, destination, subfolder);
 #endif
 	return system(command);
 }
@@ -394,7 +394,7 @@ time_t get_newest_file_timestamp(const char *path)
 #ifdef _WIN32
 	const char *command = tprintf("dir /b /s /o:-d \"%s\"", path);
 #else
-	const char *command = tprintf("find \"%s\" -type f -exec ls -lt {} +", path);
+	const char *command = tprintf("find \"%s\" -type f -printf '%T@ %p\n' | sort -n | awk '{print $2}' | tail -n 1", path);
 #endif
 
 	FILE *fp = popen(command, "r");
@@ -415,6 +415,8 @@ time_t get_newest_file_timestamp(const char *path)
 	{
 		result[strlen(result) - 1] = '\0';
 	}
+
+	trace_printf(" is '%s' ...", result);
 
 	return get_file_timestamp(result);
 }
@@ -483,8 +485,11 @@ int build_tcc(const char* dst)
 
 		const char* command = tprintf("build-tcc.bat -c \"..\\..\\tcc\\tcc.exe -DMEM_DEBUG=2\" -i \"..\\..\\%s\" -t 64 > nul", dst);
 #else
-		const char* path = src_args.folder_name;
-		const char* command = tprintf("make");
+		if (0 != (return_value = run_command(".", "mkdir -p rewind_bat/tcc")))
+			return return_value;
+
+		const char* path = dst;
+		const char* command = tprintf("../../%s/configure && make && cp tcc tcc.exe && cp -rf ../../tcc_src/lib/* ./lib && cp -rf ../../tcc_src/include ./include && cp -r . ../../tcc", src_args.folder_name);
 #endif
 		if (0 != (return_value = run_command(path, command)))
 			return return_value;
@@ -557,7 +562,7 @@ int build_and_run_libtcc_test(const char* path)
 	const char* run = ".\\libtcc_test.exe -Lgdi32 -Iinclude -Luser32 -Lkernel32";
 	const char* remove = "del libtcc_test.exe";
 #else
-	const char* build = "./tcc.exe ./examples/libtcc_test.c -o libtcc_test.exe -Ilibtcc -Llibtcc -Llib -llibtcc";
+	const char* build = "./tcc.exe ../tcc_src/examples/ex3.c -o libtcc_test.exe -Ilibtcc -Llibtcc -Llib -llibtcc";
 	const char* run = "./libtcc_test.exe -Lgdi32 -Iinclude -Luser32 -Lkernel32";
 	const char* remove  = "rm libtcc_test.exe";
 #endif
@@ -596,10 +601,15 @@ int main(int argc, char** argv)
 
 	// Build tcc from source
 	if (0 != (return_value = build_tcc("rewind_bat/tcc")))
+	{
 		fprintf(stderr, "WARNING: Couldn't build tcc from source. Falling back to prebuilt tcc for rewind.bat\n");
+	}
 
-	if (0 != (return_value = build_and_run_libtcc_test("tcc")))
-		return return_value;
+	if (dir_exists("tcc"))
+	{
+		if (0 != (return_value = build_and_run_libtcc_test("tcc")))
+			return return_value;
+	}
 
 	if (0 != (return_value = build_rewind_bat()))
 		return return_value;
