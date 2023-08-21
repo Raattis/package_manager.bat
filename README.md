@@ -2,7 +2,7 @@
 A single file package manager
 
 ## Usage
-Run `package_manager.bat` to download and run `quine.bat`.
+Run `package_manager.bat` to download and run `rewind.bat`.
 
 Note that on Linux this requires `chmod +x package_manager.bat` or `sh ./package_manager.bat`. You can add a Makefile with
 ```make
