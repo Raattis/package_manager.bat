@@ -429,7 +429,7 @@ int build_tcc(const char* dst)
 		.folder_name = "tcc_src",
 		.zip_file_name = "mob.zip",
 		.zip_internal_path_to_root = "tinycc-mob",
-		.download_path = "https://github.com/TinyCC/tinycc/archive/refs/heads/mob.zip",
+		.download_path = "https://github.com/TinyCC/tinycc/archive/a0ab99169e35c733a033417f55c35b3c0d0f7194.zip",
 		//.zip_file_name = "release_0_9_27.zip",
 		//.zip_internal_path_to_root = "tinycc-release_0_9_27",
 		//.download_path = "https://github.com/TinyCC/tinycc/archive/refs/tags/release_0_9_27.zip",
